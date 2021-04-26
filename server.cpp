@@ -97,8 +97,8 @@ void Server::Response(const char* file, string header) {
         int type = filetype(file);
         if (type == 1) str += "image/jpeg";
         else if (type == 2) str += "text/html";
-        else if (fd == -1) str += "text/html";          // if it is error
-        else str += "text/plain";                       // it can be server.cpp!!!!
+        else if (fd == -1) str += "text/html";          // если это ошибка
+        else str += "text/plain";                       // это может быть server.cpp
     }
 //DATE
     str += "\nDate: ";
@@ -111,7 +111,7 @@ void Server::Response(const char* file, string header) {
         fstat(fd, &buff);
         str += ctime(&buff.st_mtime);
     }
-    str += "\n";                                        //Нам надо отделять с помощью \n\n но первый \n заполнен от ctime
+    str += "\n";                                        //Отделяем с помощью \n\n но первый \n заполнен от ctime
     //cout << str << endl;
 
     int n = str.length();
@@ -154,14 +154,14 @@ void Server::Request() {
         char c = request[i];
         while(c != ' ') {
             i++;
-            c = request[i];  //skip to spaces
+            c = request[i];  //пропускаем пробелы
         }
-        char path[i-5];                    //possible filename
-        if (i == 5) {                      //URI doesnt contain filename
+        char path[i-5];                    //возможный filename
+        if (i == 5) {                      //URI не содержит filename
             path[0] = '/';
             path[1] = '\0';
             home = true;
-        } else {                           //copy filename to path
+        } else {                           //крпируем filename в path
             copy(&request[5], &request[i], &path[0]);
             path[i-5] = 0;
         }
@@ -171,10 +171,10 @@ void Server::Request() {
         int tmp = Filefd;
         close(Filefd);
         bool IS_FILE = buff.st_mode & S_IFREG;
-        if ((!home) && (!IS_FILE || (tmp == -1))) {          //cant open file
+        if ((!home) && (!IS_FILE || (tmp == -1))) {          //не открывает файл
             Response("404.html", "HTTP/1.1 404 NotFound");
             cerr << "Error 404" << endl;
-        } else {                                                        //if open or if homepage
+        } else {                                                        //если открыто или homepage
             if (home) Response("index.html", "HTTP/1.1 200 MyServer");
             else Response(path, "HTTP/1.1 200 MyServer");
         }
