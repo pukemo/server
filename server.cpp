@@ -198,15 +198,15 @@ void Server::Request() {
                     if (WEXITSTATUS(status)) {
                         //не окей
                         cerr << "CGI has finihed with status " << WEXITSTATUS(status) << endl;
-                        Send("src/cgi.html", "HTTP/1.1 500 MyServer", Client_fd);
+                        Response("src/cgi.html", "HTTP/1.1 500 MyServer");
                     } else {
                         //окей
                         logfile = "cgi-bin/" + logfile;
-                        Send(logfile.c_str(), "HTTP/1.1 200 MyServer", Client_fd);
+                        Response(logfile.c_str(), "HTTP/1.1 200 MyServer");
                     }
                 } else if (WIFSIGNALED(status)) {
                     cerr << "CGI has finished with signal " << WIFSIGNALED(status) << endl;
-                    Send("src/cgi.html", "HTTP/1.1 500 MyServer", Client_fd);
+                    Response("src/cgi.html", "HTTP/1.1 500 MyServer");
                 }
             
         int Filefd = open(path, O_RDONLY);
@@ -222,6 +222,7 @@ void Server::Request() {
             if (home) Response("index.html", "HTTP/1.1 200 MyServer");
             else Response(path, "HTTP/1.1 200 MyServer");
         }
+       }
     }
 }
 
