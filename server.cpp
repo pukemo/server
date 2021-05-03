@@ -165,6 +165,50 @@ void Server::Request() {
             copy(&request[5], &request[i], &path[0]);
             path[i-5] = 0;
         }
+        
+        if(!strncmp(path, "cgi-bin", 7)) {
+                 int status;
+                 int pid;
+                 string logfile = to_string(getpid()) + ".txt";
+                if((pid = fork()) < 0) {
+                    cerr << "Can't make process" << endl;
+                    exit(1);
+                }
+                if (pid == 0) {
+                    chdir("./cgi-bin");
+                    //лог файл
+                    int fd = open(logfile.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644);
+                    //get exec filename
+                    string exec_filename = "./cgi";
+                    //создаём окружение
+                    char* argv[] = {(char*)exec_filename.c_str(), NULL};
+
+                    char params[strlen(path)-12];
+                    copy(&path[12], &path[strlen(path)], &params[0]);
+                    char* env[] = {params, NULL};
+                    //EXEC
+                    dup2(fd, 1);
+                    execve(exec_filename.c_str(), argv, env);
+                    //TODO CLEAR MEMORY
+                    exit(1);
+                }
+                wait(&status);
+                if (WIFEXITED(status)) {
+                    //HANDLING
+                    if (WEXITSTATUS(status)) {
+                        //не окей
+                        cerr << "CGI has finihed with status " << WEXITSTATUS(status) << endl;
+                        Send("src/cgi.html", "HTTP/1.1 500 MyServer", Client_fd);
+                    } else {
+                        //окей
+                        logfile = "cgi-bin/" + logfile;
+                        Send(logfile.c_str(), "HTTP/1.1 200 MyServer", Client_fd);
+                    }
+                } else if (WIFSIGNALED(status)) {
+                    cerr << "CGI has finished with signal " << WIFSIGNALED(status) << endl;
+                    Send("src/cgi.html", "HTTP/1.1 500 MyServer", Client_fd);
+                }
+            
         int Filefd = open(path, O_RDONLY);
         struct stat buff;
         fstat(Filefd, &buff);
