@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -60,6 +61,7 @@ void Server::Create_client() {
     }
 }
 
+
 int filetype(const char*req) {
     int i = 0;
     while (req[i] != '.' && req[i] != 0) {
@@ -97,8 +99,8 @@ void Server::Response(const char* file, string header) {
         int type = filetype(file);
         if (type == 1) str += "image/jpeg";
         else if (type == 2) str += "text/html";
-        else if (fd == -1) str += "text/html";          // если это ошибка
-        else str += "text/plain";                       // это может быть server.cpp
+        else if (fd == -1) str += "text/html";          // if it is error
+        else str += "text/plain";                       // it can be server.cpp!!!!
     }
 //DATE
     str += "\nDate: ";
@@ -111,7 +113,7 @@ void Server::Response(const char* file, string header) {
         fstat(fd, &buff);
         str += ctime(&buff.st_mtime);
     }
-    str += "\n";                                        //Отделяем с помощью \n\n но первый \n заполнен от ctime
+    str += "\n";                                        //Нам надо отделять с помощью \n\n но первый \n заполнен от ctime
     //cout << str << endl;
 
     int n = str.length();
@@ -154,75 +156,84 @@ void Server::Request() {
         char c = request[i];
         while(c != ' ') {
             i++;
-            c = request[i];  //пропускаем пробелы
+            c = request[i];  //skip to spaces
         }
-        char path[i-5];                    //возможный filename
-        if (i == 5) {                      //URI не содержит filename
+        char path[i-5];                    //possible filename
+        if (i == 5) {                      //URI doesnt contain filename
             path[0] = '/';
             path[1] = '\0';
             home = true;
-        } else {                           //крпируем filename в path
+        } else {                           //copy filename to path
             copy(&request[5], &request[i], &path[0]);
             path[i-5] = 0;
         }
-        
-        if(!strncmp(path, "cgi-bin", 7)) {
-                 int status;
-                 int pid;
-                 string logfile = to_string(getpid()) + ".txt";
-                if((pid = fork()) < 0) {
-                    cerr << "Can't make process" << endl;
-                    exit(1);
-                }
-                if (pid == 0) {
-                    chdir("./cgi-bin");
-                    //лог файл
-                    int fd = open(logfile.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644);
-                    //get exec filename
-                    string exec_filename = "./cgi";
-                    //создаём окружение
-                    char* argv[] = {(char*)exec_filename.c_str(), NULL};
 
-                    char params[strlen(path)-12];
-                    copy(&path[12], &path[strlen(path)], &params[0]);
-                    char* env[] = {params, NULL};
-                    //EXEC
-                    dup2(fd, 1);
-                    execve(exec_filename.c_str(), argv, env);
-                    //TODO CLEAR MEMORY
-                    exit(1);
-                }
-                wait(&status);
-                if (WIFEXITED(status)) {
-                    //HANDLING
-                    if (WEXITSTATUS(status)) {
-                        //не окей
-                        cerr << "CGI has finihed with status " << WEXITSTATUS(status) << endl;
-                        Response("src/cgi.html", "HTTP/1.1 500 MyServer");
-                    } else {
-                        //окей
-                        logfile = "cgi-bin/" + logfile;
-                        Response(logfile.c_str(), "HTTP/1.1 200 MyServer");
-                    }
-                } else if (WIFSIGNALED(status)) {
-                    cerr << "CGI has finished with signal " << WIFSIGNALED(status) << endl;
+        if(!strncmp(path, "cgi-bin", 7)) {
+            int status;
+            int pid;
+            string logfile = to_string(getpid()) + ".txt";
+            if((pid = fork()) < 0) {
+                cerr << "Can't make process" << endl;
+                exit(1);
+            }
+            if (pid == 0) {
+                chdir("./cgi-bin");
+                //лог файл
+                int fd = open(logfile.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0644);
+                //get exec filename
+                string exec_filename = "./cgi";
+                //создаём окружение
+                char* argv[] = {(char*)exec_filename.c_str(), NULL};
+
+                char params[strlen(path)-12];
+                copy(&path[12], &path[strlen(path)], &params[0]);
+                params[strlen(path)-12]=0;
+                char**env = new char*[2];
+
+                env[0] = new char[(int)strlen("QUERY_STRING=") + (int)strlen(params) + 1];
+                strcpy(env[0], "QUERY_STRING=");
+                strcat(env[0], params);
+
+                env[1] = NULL;
+
+
+                //EXEC
+                dup2(fd, 1);
+                execve(exec_filename.c_str(), argv, env);
+                //TODO CLEAR MEMORY
+                exit(1);
+            }
+            wait(&status);
+            if (WIFEXITED(status)) {
+                //HANDLING
+                if (WEXITSTATUS(status)) {
+                    //не окей
+                    cerr << "CGI has finihed with status " << WEXITSTATUS(status) << endl;
                     Response("src/cgi.html", "HTTP/1.1 500 MyServer");
+                } else {
+                    //окей
+                    logfile = "cgi-bin/" + logfile;
+                    Response(logfile.c_str(), "HTTP/1.1 200 MyServer");
                 }
-            
+            } else if (WIFSIGNALED(status)) {
+                cerr << "CGI has finished with signal " << WIFSIGNALED(status) << endl;
+                Response("src/cgi.html", "HTTP/1.1 500 MyServer");
+            }
+        } else {
         int Filefd = open(path, O_RDONLY);
         struct stat buff;
         fstat(Filefd, &buff);
         int tmp = Filefd;
         close(Filefd);
         bool IS_FILE = buff.st_mode & S_IFREG;
-        if ((!home) && (!IS_FILE || (tmp == -1))) {          //не открывает файл
+        if ((!home) && (!IS_FILE || (tmp == -1))) {          //cant open file
             Response("404.html", "HTTP/1.1 404 NotFound");
             cerr << "Error 404" << endl;
-        } else {                                                        //если открыто или homepage
+        } else {                                                        //if open or if homepage
             if (home) Response("index.html", "HTTP/1.1 200 MyServer");
             else Response(path, "HTTP/1.1 200 MyServer");
         }
-       }
+        }
     }
 }
 
